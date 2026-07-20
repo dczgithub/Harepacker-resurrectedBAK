@@ -11,21 +11,32 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - name: Checkout source code
+      - name: Checkout source & recursive submodules
         uses: actions/checkout@v4
         with:
-          submodules: recursive # 新增：拉取子模块
+          submodules: recursive
 
+      # 获取MSBuild完整路径存入变量
+      - name: Locate MSBuild
+        id: locate_msbuild
+        run: |
+          $msbuildPath = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
+          echo "MSBUILD_PATH=$msbuildPath" >> $env:GITHUB_ENV
+
+      # 还原NuGet依赖
       - name: Restore NuGet packages
-        run: msbuild Harepacker.sln -t:Restore -p:Configuration=Release
+        run: & "${env:MSBUILD_PATH}" Harepacker.sln -t:Restore -p:Configuration=Release
 
-      - name: Build & Publish x64 Release
-        run: msbuild Harepacker.sln -t:Publish -p:Configuration=Release;Platform=x64;PublishDir=./publish
+      # 编译Release x64
+      - name: Build Release
+        run: & "${env:MSBUILD_PATH}" Harepacker.sln -t:Build -p:Configuration=Release;Platform=x64
 
-      - name: Zip binaries
-        run: Compress-Archive -Path ./publish/* -DestinationPath Harepacker-x64.zip
+      # 打包程序
+      - name: Zip Binaries
+        run: Compress-Archive -Path ./HaRepacker/bin/x64/Release/* -DestinationPath Harepacker-x64.zip
 
-      - name: Upload build artifact
+      # 上传成品
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Harepacker-x64

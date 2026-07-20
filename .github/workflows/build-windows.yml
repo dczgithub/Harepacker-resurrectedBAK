@@ -5,29 +5,31 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-  workflow_dispatch: # 支持手动触发Run workflow
+  workflow_dispatch: # 手动触发按钮
 
 jobs:
   build:
     runs-on: windows-latest
     steps:
-    - name: Checkout source code
-      uses: actions/checkout@v4
+      # 拉取源码
+      - name: Checkout source code
+        uses: actions/checkout@v4
 
-    - name: Setup .NET Framework Build Tools
-      uses: ilammy/msbuild-dev@v1
+      # 还原NuGet依赖
+      - name: Restore NuGet packages
+        run: msbuild Harepacker.sln -t:Restore -p:Configuration=Release
 
-    - name: Restore NuGet packages
-      run: msbuild Harepacker.sln -t:Restore -p:Configuration=Release
+      # 编译并发布x64 Release版本
+      - name: Build & Publish x64 Release
+        run: msbuild Harepacker.sln -t:Publish -p:Configuration=Release;Platform=x64;PublishDir=./publish
 
-    - name: Build Release x64
-      run: msbuild Harepacker.sln -t:Publish -p:Configuration=Release;Platform=x64;PublishDir=./publish
+      # 打包成品
+      - name: Zip binaries
+        run: Compress-Archive -Path ./publish/* -DestinationPath Harepacker-x64.zip
 
-    - name: Zip compiled binaries
-      run: Compress-Archive -Path ./publish/* -DestinationPath Harepacker-x64.zip
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: Harepacker-x64
-        path: Harepacker-x64.zip
+      # 上传编译包供下载
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Harepacker-x64
+          path: Harepacker-x64.zip

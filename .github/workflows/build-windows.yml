@@ -15,6 +15,10 @@ jobs:
         with:
           submodules: recursive
 
+      # 新增：安装libpng依赖，解决png.h缺失
+      - name: Install libpng via Chocolatey
+        run: choco install libpng --no-progress -y
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -29,21 +33,17 @@ jobs:
       - name: Setup NuGet
         uses: nuget/setup-nuget@v2
 
-      # 修正：使用正确的解决方案文件名 MapleHaSuite.sln
       - name: Restore NuGet packages
         run: |
           nuget restore MapleHaSuite.sln
           dotnet restore MapleHaSuite.sln
 
-      # 编译x64 Release版本
       - name: Build Release x64
         run: msbuild MapleHaSuite.sln /p:Configuration=Release /p:Platform="x64" /p:RestorePackages=false
 
-      # 打包编译输出程序
       - name: Zip Compiled Binaries
         run: Compress-Archive -Path ./HaRepacker/bin/x64/Release/* -DestinationPath Harepacker-x64.zip
 
-      # 上传成品压缩包
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
         with:

@@ -1,61 +1,53 @@
-name: "CodeQL"
-
+name: Build Windows x64 Release
 on:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-  schedule:
-    - cron: '35 2 * * 6'
+  workflow_dispatch: # 支持手动一键编译
 
 jobs:
-  analyze:
-    name: Analyze
+  build:
     runs-on: windows-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        language: [ 'cpp', 'csharp' ]
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
-      with:
-        submodules: recursive
+      # 1. 拉取源码+递归子模块（官方原版配置）
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: |
-          8.0.x
-          10.0.x
-        dotnet-quality: 'preview'
+      # 2. 官方标准：安装.NET + 自动把MSBuild加入系统PATH（彻底解决msbuild命令找不到）
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+          dotnet-quality: 'preview'
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v2
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
 
-    - name: Setup NuGet
-      uses: nuget/setup-nuget@v2
+      - name: Setup NuGet
+        uses: nuget/setup-nuget@v2
 
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v3
-      with:
-        languages: ${{ matrix.language }}
+      # 3. 还原依赖（和作者官方命令完全一致）
+      - name: Restore NuGet packages
+        run: |
+          nuget restore Harepacker.sln
+          dotnet restore Harepacker.sln
 
-    - name: Restore NuGet packages
-      run: |
-        nuget restore MapleHaSuite.sln
-        dotnet restore MapleHaSuite.sln
+      # 4. 编译Release x64 成品
+      - name: Build Release x64
+        run: msbuild Harepacker.sln /p:Configuration=Release /p:Platform="x64" /p:RestorePackages=false
 
-    - name: Build Solution
-      run: |
-        if [ "${{ matrix.language }}" == "csharp" ]; then
-          dotnet build MapleHaSuite.sln -c Release
-        else
-          msbuild MapleHaSuite.sln /p:Configuration=Release /p:Platform="x64" /p:RestorePackages=false
-        fi
-      shell: bash
+      # 5. 打包编译好的程序
+      - name: Zip Compiled Binaries
+        run: Compress-Archive -Path ./HaRepacker/bin/x64/Release/* -DestinationPath Harepacker-x64.zip
 
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v3
+      # 6. 上传可下载压缩包
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Harepacker-x64
+          path: Harepacker-x64.zip

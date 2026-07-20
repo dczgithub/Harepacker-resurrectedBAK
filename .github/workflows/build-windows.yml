@@ -1,0 +1,33 @@
+name: Build Windows x64
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch: # 支持手动触发Run workflow
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET Framework Build Tools
+      uses: ilammy/msbuild-dev@v1
+
+    - name: Restore NuGet packages
+      run: msbuild Harepacker.sln -t:Restore -p:Configuration=Release
+
+    - name: Build Release x64
+      run: msbuild Harepacker.sln -t:Publish -p:Configuration=Release;Platform=x64;PublishDir=./publish
+
+    - name: Zip compiled binaries
+      run: Compress-Archive -Path ./publish/* -DestinationPath Harepacker-x64.zip
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Harepacker-x64
+        path: Harepacker-x64.zip

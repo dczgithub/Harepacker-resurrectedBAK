@@ -1,38 +1,61 @@
-name: Build Windows x64
+name: "CodeQL"
+
 on:
   push:
     branches: [ master ]
   pull_request:
     branches: [ master ]
-  workflow_dispatch:
+  schedule:
+    - cron: '35 2 * * 6'
 
 jobs:
-  build:
+  analyze:
+    name: Analyze
     runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [ 'cpp', 'csharp' ]
+
     steps:
-      - name: Checkout source & submodules
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
 
-      - name: Locate MSBuild
-        id: locate_msbuild
-        run: |
-          $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $msbuildPath = & $vsWhere -latest -products * -requires Microsoft.Component.MSBuild -find "MSBuild\**\Bin\MSBuild.exe" | Select-Object -First 1
-          echo "MSBUILD_PATH=$msbuildPath" >> $env:GITHUB_ENV
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: |
+          8.0.x
+          10.0.x
+        dotnet-quality: 'preview'
 
-      - name: Restore NuGet packages
-        run: & "${env:MSBUILD_PATH}" Harepacker.sln -t:Restore -p:Configuration=Release
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v2
 
-      - name: Build Release x64
-        run: & "${env:MSBUILD_PATH}" Harepacker.sln -t:Build -p:Configuration=Release;Platform=x64
+    - name: Setup NuGet
+      uses: nuget/setup-nuget@v2
 
-      - name: Zip compiled binaries
-        run: Compress-Archive -Path ./HaRepacker/bin/x64/Release/* -DestinationPath Harepacker-x64.zip
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: ${{ matrix.language }}
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Harepacker-x64
-          path: Harepacker-x64.zip
+    - name: Restore NuGet packages
+      run: |
+        nuget restore MapleHaSuite.sln
+        dotnet restore MapleHaSuite.sln
+
+    - name: Build Solution
+      run: |
+        if [ "${{ matrix.language }}" == "csharp" ]; then
+          dotnet build MapleHaSuite.sln -c Release
+        else
+          msbuild MapleHaSuite.sln /p:Configuration=Release /p:Platform="x64" /p:RestorePackages=false
+        fi
+      shell: bash
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
